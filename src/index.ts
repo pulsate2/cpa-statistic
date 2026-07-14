@@ -12,6 +12,7 @@ import {
 import {
   buildAnalysisV1,
   buildEventsV1,
+  buildEventSourceFiltersV1,
   buildUsageOverviewV1,
   emptyRealtime,
 } from "./api/compat/usage";
@@ -222,14 +223,7 @@ async function handleV1(request: Request, env: Env, ctx: ExecutionContext, url: 
   }
 
   if (path === "/api/v1/usage/events/filters/sources" && method === "GET") {
-    const rows = (
-      await env.DB.prepare(
-        `SELECT DISTINCT source FROM usage_events WHERE source != '' ORDER BY source ASC LIMIT 500`,
-      ).all<{ source: string }>()
-    ).results ?? [];
-    return json({
-      sources: rows.map((r) => ({ value: r.source, label: r.source, displayName: r.source })),
-    });
+    return json(await buildEventSourceFiltersV1(env));
   }
 
   if (path.startsWith("/api/v1/usage/events/") && path.endsWith("/request-log") && method === "GET") {

@@ -2,6 +2,7 @@ import type { Env } from "../../types";
 import { resolveTz } from "../../lib/time";
 import { getMeta } from "../../ingest/pipeline";
 import { redactSensitiveValue } from "../../lib/redact";
+import { resolvePublicEventSource } from "../../lib/source-display";
 
 /** Expand range presets used by original frontend. */
 export function resolveRangeBounds(
@@ -556,8 +557,9 @@ export async function buildEventsV1(env: Env, url: URL) {
     binds.push(model);
   }
   if (source && source !== "__all__") {
-    where.push("source = ?");
-    binds.push(source);
+    // Frontend sends identity (auth_index preferred); also match raw source for older rows
+    where.push("(auth_index = ? OR source = ?)");
+    binds.push(source, source);
   }
   if (result === "failed" || result === "1" || result === "true") {
     where.push("failed = 1");
@@ -599,11 +601,12 @@ export async function buildEventsV1(env: Env, url: URL) {
     const speed =
       e.latency_ms > 0 && e.output_tokens > 0 ? (e.output_tokens / e.latency_ms) * 1000 : undefined;
     const rawKey = String(e.api_group_key || "unknown");
+    const pub = resolvePublicEventSource(e);
     return {
       id: String(e.id),
       request_id: e.request_id,
       timestamp: e.timestamp,
-      // Only mask api_key for the browser; source is a provider/label, not a secret
+      // CPA client key (masked). Not the AI-provider upstream key.
       api_key: redactSensitiveValue(rawKey),
       model: e.model,
       model_alias: e.model_alias || undefined,
@@ -611,8 +614,10 @@ export async function buildEventsV1(env: Env, url: URL) {
       service_tier: e.service_tier || undefined,
       executor_type: e.executor_type || undefined,
       endpoint: e.endpoint || undefined,
-      source: e.source || e.auth_index || "",
-      source_raw: e.source,
+      // AI provider → provider name; oauth → auth file source (never bare API key)
+      source: pub.source,
+      source_raw: pub.source_raw,
+      source_type: pub.source_type || undefined,
       auth_index: e.auth_index,
       failed: Boolean(e.failed),
       latency_ms: e.latency_ms,
@@ -638,6 +643,45 @@ export async function buildEventsV1(env: Env, url: URL) {
     page_size: pageSize,
     total_pages: Math.max(1, Math.ceil(total / pageSize)),
   };
+}
+
+/** Source filter dropdown: value = auth_index identity; label = human display name. */
+export async function buildEventSourceFiltersV1(env: Env) {
+  const rows =
+    (
+      await env.DB.prepare(
+        `SELECT
+           COALESCE(NULLIF(TRIM(auth_index), ''), NULLIF(TRIM(source), ''), '') AS identity,
+           MAX(auth_type) AS auth_type,
+           MAX(provider) AS provider,
+           MAX(source) AS source,
+           MAX(auth_index) AS auth_index
+         FROM usage_events
+         GROUP BY identity
+         HAVING identity != ''
+         ORDER BY identity ASC
+         LIMIT 500`,
+      ).all<{
+        identity: string;
+        auth_type: string;
+        provider: string;
+        source: string;
+        auth_index: string;
+      }>()
+    ).results ?? [];
+
+  const sources = rows.map((r) => {
+    const pub = resolvePublicEventSource(r);
+    return {
+      value: r.identity,
+      label: pub.source,
+      displayName: pub.source,
+    };
+  });
+
+  // Prefer stable label sort for UI
+  sources.sort((a, b) => a.label.localeCompare(b.label));
+  return { sources };
 }
 
 function emptyAgg(): AggRow {

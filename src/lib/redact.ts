@@ -6,7 +6,7 @@
 
 const SENSITIVE_VALUE_MASK = "*********";
 
-/** Mask API keys / other sensitive lookup strings for UI responses. */
+/** Mask API keys for UI responses only (not source/provider labels). */
 export function redactSensitiveValue(value: string | null | undefined): string {
   const trimmed = (value ?? "").trim();
   if (!trimmed || trimmed === "unknown") return "unknown";
@@ -14,23 +14,4 @@ export function redactSensitiveValue(value: string | null | undefined): string {
   const runes = Array.from(trimmed);
   if (runes.length <= 9) return SENSITIVE_VALUE_MASK;
   return runes.slice(0, 3).join("") + SENSITIVE_VALUE_MASK + runes.slice(-6).join("");
-}
-
-/**
- * Redact when value looks like a credential (sk-…, long random token), leave short labels alone.
- * Used for free-form fields like `source` that may or may not be a key.
- */
-export function redactIfSensitiveLooking(value: string | null | undefined): string {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed) return "";
-  if (trimmed === "unknown") return "unknown";
-  // common API key prefixes / long opaque tokens
-  if (
-    /^(sk|pk|rk|ak|api)[-_]/i.test(trimmed) ||
-    trimmed.length >= 20 ||
-    /^[A-Za-z0-9_\-+/=]{16,}$/.test(trimmed)
-  ) {
-    return redactSensitiveValue(trimmed);
-  }
-  return trimmed;
 }

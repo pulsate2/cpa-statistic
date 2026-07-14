@@ -1,7 +1,7 @@
 import type { Env } from "../../types";
 import { resolveTz } from "../../lib/time";
 import { getMeta } from "../../ingest/pipeline";
-import { redactIfSensitiveLooking, redactSensitiveValue } from "../../lib/redact";
+import { redactSensitiveValue } from "../../lib/redact";
 
 /** Expand range presets used by original frontend. */
 export function resolveRangeBounds(
@@ -599,12 +599,11 @@ export async function buildEventsV1(env: Env, url: URL) {
     const speed =
       e.latency_ms > 0 && e.output_tokens > 0 ? (e.output_tokens / e.latency_ms) * 1000 : undefined;
     const rawKey = String(e.api_group_key || "unknown");
-    const rawSource = String(e.source || e.auth_index || "");
     return {
       id: String(e.id),
       request_id: e.request_id,
       timestamp: e.timestamp,
-      // Never expose raw API key to the browser (aligned with cpa-usage-keeper RedactSensitiveValue)
+      // Only mask api_key for the browser; source is a provider/label, not a secret
       api_key: redactSensitiveValue(rawKey),
       model: e.model,
       model_alias: e.model_alias || undefined,
@@ -612,9 +611,8 @@ export async function buildEventsV1(env: Env, url: URL) {
       service_tier: e.service_tier || undefined,
       executor_type: e.executor_type || undefined,
       endpoint: e.endpoint || undefined,
-      source: redactIfSensitiveLooking(rawSource),
-      // Keep source_raw for filter value matching, but still mask if it looks like a key
-      source_raw: redactIfSensitiveLooking(String(e.source || "")),
+      source: e.source || e.auth_index || "",
+      source_raw: e.source,
       auth_index: e.auth_index,
       failed: Boolean(e.failed),
       latency_ms: e.latency_ms,

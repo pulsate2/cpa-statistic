@@ -1,0 +1,5 @@
+# 复制为 .dev.vars 后供 wrangler dev 使用（勿提交真实密钥）
+CPA_BASE_URL=https://your-cpa.example.com:8317
+CPA_MANAGEMENT_KEY=replace-with-your-management-key
+# 可选：看板简易密码；设置后请求需带 Header: Authorization: Bearer <password>
+# DASHBOARD_PASSWORD=change-me

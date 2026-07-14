@@ -1,0 +1,33 @@
+name = "cpa-statistics"
+main = "src/index.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "ceef02e63c625bc88a01acbe89103cc1"
+
+# 静态看板：原 cpa-usage-keeper 前端精简版（构建产物 web/dist）
+assets = { directory = "./web/dist", binding = "ASSETS", not_found_handling = "single-page-application" }
+
+# 每分钟保底拉取 CPA usage queue
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cpa-statistics"
+database_id = "0a86d28f-e55b-4ee0-b093-01d9d2d0e7a2"
+preview_database_id = "local-cpa-statistics"
+
+[vars]
+# 业务时区：影响 Today / 小时桶 / 日桶
+TZ = "Asia/Shanghai"
+# 有人访问页面时，读路径触发拉取的最小间隔（秒）
+PULL_MIN_INTERVAL_SEC = "10"
+# 单次从 CPA 拉取的最大条数
+USAGE_QUEUE_BATCH_SIZE = "200"
+# 单轮最多连续拉几次（满批续拉）
+USAGE_QUEUE_MAX_ROUNDS = "10"
+# 可选：简易看板访问密码；留空则不鉴权（仅建议本地）
+# DASHBOARD_PASSWORD 请用 secret，不要写在 vars
+# CPA_BASE_URL / CPA_MANAGEMENT_KEY 请用 wrangler secret 或 .dev.vars
+
+# 本地开发: 复制 .dev.vars.example → .dev.vars

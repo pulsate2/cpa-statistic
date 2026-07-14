@@ -1,0 +1,12 @@
+node_modules/
+web/node_modules/
+.wrangler/
+.deploy-bundle/
+.dev.vars
+.DS_Store
+dist/
+web/dist/
+*.log
+.worker-configuration.d.ts
+worker-configuration.d.ts
+.kv-namespace-id

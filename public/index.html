@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CPA Statistics</title>
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --text: #e7eefc;
+      --muted: #93a4c3;
+      --accent: #5b9dff;
+      --ok: #3dd68c;
+      --bad: #ff6b7a;
+      --border: #243049;
+      --chip: #1a2438;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2a4a 0%, transparent 50%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+      padding: 18px 22px; border-bottom: 1px solid var(--border); backdrop-filter: blur(8px);
+      position: sticky; top: 0; background: rgba(11,18,32,.85); z-index: 10;
+    }
+    h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    select, button, input {
+      background: var(--chip); color: var(--text); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 12px; font-size: 13px;
+    }
+    button { cursor: pointer; }
+    button.primary { background: linear-gradient(180deg, #3d7eff, #2f62d6); border-color: #3d7eff; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    main { padding: 18px 22px 40px; max-width: 1200px; margin: 0 auto; }
+    .cards {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel);
+      border: 1px solid var(--border); border-radius: 14px; padding: 14px 14px 12px;
+    }
+    .card .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .card .value { font-size: 22px; font-weight: 650; letter-spacing: -.3px; }
+    .card .sub { margin-top: 4px; font-size: 12px; color: var(--muted); }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px;
+    }
+    .panel h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
+    .bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; }
+    .bar {
+      flex: 1; min-width: 6px; background: linear-gradient(180deg, #7eb6ff, #3b6fd4);
+      border-radius: 4px 4px 2px 2px; opacity: .9; position: relative;
+    }
+    .bar:hover { opacity: 1; outline: 1px solid #9ec5ff; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      background: var(--chip); border: 1px solid var(--border); font-size: 12px;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+    .dot.warn { background: #f5c84c; }
+    .dot.bad { background: var(--bad); }
+    .error {
+      background: rgba(255,107,122,.1); border: 1px solid rgba(255,107,122,.35);
+      color: #ffc2c8; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 13px;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .auth-box {
+      max-width: 420px; margin: 12vh auto; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 22px;
+    }
+    .auth-box h1 { margin-bottom: 8px; }
+    .auth-box input { width: 100%; margin: 12px 0; }
+    .auth-box button { width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="auth" class="auth-box" hidden>
+    <h1>CPA Statistics</h1>
+    <p class="muted">此部署启用了看板密码。输入后保存在本机 localStorage。</p>
+    <input id="pwd" type="password" placeholder="Dashboard password" />
+    <button class="primary" id="authBtn">进入</button>
+    <p id="authErr" class="error" hidden></p>
+  </div>
+
+  <div id="app" hidden>
+    <header>
+      <div>
+        <h1>CPA Statistics</h1>
+        <div class="muted">Cloudflare Workers · HTTP pull · D1</div>
+      </div>
+      <div class="row">
+        <span class="pill"><span id="statusDot" class="dot"></span><span id="syncLabel">同步中…</span></span>
+        <select id="range">
+          <option value="today">今天</option>
+          <option value="24h">近 24 小时</option>
+          <option value="7d">近 7 天</option>
+          <option value="30d">近 30 天</option>
+        </select>
+        <button id="refreshBtn" class="primary">立即同步</button>
+        <label class="muted row" style="gap:6px">
+          <input type="checkbox" id="auto" checked /> 自动刷新 (8s)
+        </label>
+      </div>
+    </header>
+    <main>
+      <div id="err" class="error" hidden></div>
+      <div class="cards" id="cards"></div>
+      <div class="panel">
+        <h2>请求量趋势</h2>
+        <div class="bars" id="bars"></div>
+        <div class="muted" id="seriesHint" style="margin-top:8px"></div>
+      </div>
+      <div class="panel">
+        <h2>模型 Top</h2>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Requests</th><th>Tokens</th><th>Est. Cost</th></tr>
+          </thead>
+          <tbody id="models"></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>最近事件</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>Model</th><th>Auth</th><th>Result</th><th>Tokens</th><th>Latency</th><th>Request ID</th>
+            </tr>
+          </thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      token: localStorage.getItem("cpa_stats_token") || "",
+      timer: null,
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function authHeaders() {
+      const h = { Accept: "application/json" };
+      if (state.token) h.Authorization = "Bearer " + state.token;
+      return h;
+    }
+
+    async function api(path) {
+      const res = await fetch(path, { headers: authHeaders() });
+      if (res.status === 401) {
+        showAuth(true);
+        throw new Error("unauthorized");
+      }
+      const data = await res.json();
+      if (!res.ok && data.error) throw new Error(data.error);
+      return data;
+    }
+
+    function showAuth(need) {
+      $("auth").hidden = !need;
+      $("app").hidden = need;
+    }
+
+    function fmt(n) {
+      if (n == null) return "—";
+      return Number(n).toLocaleString();
+    }
+    function fmtCost(n) {
+      if (n == null) return "—";
+      return "$" + Number(n).toFixed(4);
+    }
+    function fmtRate(n) {
+      return (Number(n) * 100).toFixed(1) + "%";
+    }
+    function ago(iso) {
+      if (!iso) return "从未同步";
+      const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+      if (s < 5) return "刚刚";
+      if (s < 60) return s + " 秒前";
+      if (s < 3600) return Math.floor(s / 60) + " 分钟前";
+      return Math.floor(s / 3600) + " 小时前";
+    }
+
+    function renderCards(summary, meta) {
+      const items = [
+        { label: "Requests", value: fmt(summary.requestCount), sub: "成功 " + fmt(summary.successCount) },
+        { label: "Success rate", value: fmtRate(summary.successRate), sub: "失败 " + fmt(summary.failureCount) },
+        { label: "Total tokens", value: fmt(summary.totalTokens), sub: "in " + fmt(summary.inputTokens) + " / out " + fmt(summary.outputTokens) },
+        { label: "Cache read", value: fmt(summary.cacheReadTokens), sub: "create " + fmt(summary.cacheCreationTokens) },
+        { label: "Est. cost", value: fmtCost(summary.estimatedCostUsd), sub: "需配置 model_prices" },
+        { label: "Timezone", value: meta.timezone || "—", sub: meta.range + " · " + meta.granularity },
+      ];
+      $("cards").innerHTML = items.map((i) =>
+        `<div class="card"><div class="label">${i.label}</div><div class="value">${i.value}</div><div class="sub">${i.sub}</div></div>`
+      ).join("");
+    }
+
+    function renderBars(series) {
+      const el = $("bars");
+      if (!series || !series.length) {
+        el.innerHTML = `<div class="muted">暂无数据。确认 CPA 已开启 usage-statistics-enabled，并点击「立即同步」。</div>`;
+        $("seriesHint").textContent = "";
+        return;
+      }
+      const max = Math.max(...series.map((s) => s.requests), 1);
+      el.innerHTML = series.map((s) => {
+        const h = Math.max(3, Math.round((s.requests / max) * 130));
+        return `<div class="bar" style="height:${h}px" title="${s.bucket}\nreq=${s.requests}\ntokens=${s.tokens}"></div>`;
+      }).join("");
+      $("seriesHint").textContent = `${series.length} buckets · max ${max} req`;
+    }
+
+    function renderModels(models) {
+      $("models").innerHTML = (models || []).map((m) =>
+        `<tr><td class="mono">${escapeHtml(m.model)}</td><td>${fmt(m.requests)}</td><td>${fmt(m.tokens)}</td><td>${fmtCost(m.costUsd)}</td></tr>`
+      ).join("") || `<tr><td colspan="4" class="muted">暂无</td></tr>`;
+    }
+
+    function renderEvents(events) {
+      $("events").innerHTML = (events || []).map((e) => {
+        const ok = !e.failed;
+        return `<tr>
+          <td class="mono">${escapeHtml(String(e.timestamp || "").replace("T", " ").replace("Z",""))}</td>
+          <td class="mono">${escapeHtml(e.model || "")}</td>
+          <td class="mono">${escapeHtml(e.auth_index || "")}</td>
+          <td style="color:${ok ? "var(--ok)" : "var(--bad)"}">${ok ? "OK" : "FAIL"}</td>
+          <td>${fmt(e.total_tokens)}</td>
+          <td>${fmt(e.latency_ms)} ms</td>
+          <td class="mono">${escapeHtml(e.request_id || e.event_key || "")}</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="7" class="muted">暂无事件</td></tr>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+
+    async function refresh(manual = false) {
+      $("err").hidden = true;
+      $("refreshBtn").disabled = true;
+      try {
+        if (manual) {
+          await api("/api/ingest?force=1");
+        }
+        const range = $("range").value;
+        const overview = await api("/api/overview?range=" + encodeURIComponent(range) + "&sync=1");
+        const events = await api("/api/events?pageSize=30");
+
+        renderCards(overview.summary, overview);
+        renderBars(overview.series);
+        renderModels(overview.models);
+        renderEvents(events.events);
+
+        const last = overview.lastSyncedAt || overview.pull?.lastSyncedAt;
+        const err = overview.lastPullError;
+        $("syncLabel").textContent = "最后同步 " + ago(last) + (overview.pull?.triggered ? " · 已拉取" : overview.pull?.reason ? " · " + overview.pull.reason : "");
+        $("statusDot").className = "dot" + (err ? " bad" : last ? "" : " warn");
+        if (err) {
+          $("err").hidden = false;
+          $("err").textContent = "最近拉取错误: " + err;
+        }
+      } catch (e) {
+        if (String(e.message) !== "unauthorized") {
+          $("err").hidden = false;
+          $("err").textContent = String(e.message || e);
+          $("statusDot").className = "dot bad";
+          $("syncLabel").textContent = "刷新失败";
+        }
+      } finally {
+        $("refreshBtn").disabled = false;
+      }
+    }
+
+    function setupTimer() {
+      if (state.timer) clearInterval(state.timer);
+      if ($("auto").checked) {
+        state.timer = setInterval(() => {
+          if (document.visibilityState === "visible") refresh(false);
+        }, 8000);
+      }
+    }
+
+    $("authBtn").onclick = async () => {
+      state.token = $("pwd").value.trim();
+      localStorage.setItem("cpa_stats_token", state.token);
+      try {
+        await api("/api/health");
+        $("authErr").hidden = true;
+        showAuth(false);
+        refresh(true);
+        setupTimer();
+      } catch {
+        $("authErr").hidden = false;
+        $("authErr").textContent = "密码错误或服务不可用";
+      }
+    };
+
+    $("refreshBtn").onclick = () => refresh(true);
+    $("range").onchange = () => refresh(false);
+    $("auto").onchange = setupTimer;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refresh(false);
+    });
+
+    (async function init() {
+      // Probe auth requirement
+      try {
+        const res = await fetch("/api/health", { headers: authHeaders() });
+        if (res.status === 401) {
+          showAuth(true);
+          return;
+        }
+        showAuth(false);
+        await refresh(false);
+        setupTimer();
+      } catch (e) {
+        showAuth(false);
+        $("err").hidden = false;
+        $("err").textContent = String(e.message || e);
+        $("app").hidden = false;
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "cpa-statistics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Workers port of CPA usage core statistics (HTTP pull + D1)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --ip 0.0.0.0 --port 9000",
+    "deploy": "npm run build:web && wrangler deploy",
+    "build:web": "npm --prefix web run build",
+    "cf-typegen": "wrangler types",
+    "db:local": "wrangler d1 execute cpa-statistics --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute cpa-statistics --remote --file=./schema.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.24.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260708.1": true
+  }
+}

@@ -1,6 +1,7 @@
 import type { Env } from "../../types";
 import { resolveTz } from "../../lib/time";
 import { getMeta } from "../../ingest/pipeline";
+import { redactIfSensitiveLooking, redactSensitiveValue } from "../../lib/redact";
 
 /** Expand range presets used by original frontend. */
 export function resolveRangeBounds(
@@ -455,12 +456,15 @@ export async function buildAnalysisV1(env: Env, url: URL) {
     };
   });
 
-  const toComp = (rows: any[], keyField: string) =>
+  const toComp = (rows: any[], keyField: string, redactKey = false) =>
     rows.map((m) => {
       const cost = keyField === "model" ? costFor(m, priceMap.get(m.model)) : null;
+      const raw = String(m[keyField] || m.key || "unknown");
+      const display = redactKey ? redactSensitiveValue(raw) : raw;
       return {
-        key: String(m[keyField] || m.key || "unknown"),
-        label: String(m[keyField] || m.key || "unknown"),
+        // Browser-facing: mask keys; keep stable masked form as both key & label
+        key: display,
+        label: display,
         total_tokens: m.total_tokens,
         requests: m.request_count,
         percent: m.total_tokens / totalTokens,
@@ -501,8 +505,8 @@ export async function buildAnalysisV1(env: Env, url: URL) {
     range_start: bounds.startIso,
     range_end: bounds.endIso,
     token_usage,
-    model_composition: toComp(modelRows, "model"),
-    api_key_composition: toComp(keyRows, "key"),
+    model_composition: toComp(modelRows, "model", false),
+    api_key_composition: toComp(keyRows, "key", true),
     auth_files_composition: [],
     ai_provider_composition: [],
     heatmap: { api_keys: [], api_key_labels: {}, models: [], cells: [] },
@@ -594,19 +598,23 @@ export async function buildEventsV1(env: Env, url: URL) {
     const cost = costFor(agg, priceMap.get(e.model));
     const speed =
       e.latency_ms > 0 && e.output_tokens > 0 ? (e.output_tokens / e.latency_ms) * 1000 : undefined;
+    const rawKey = String(e.api_group_key || "unknown");
+    const rawSource = String(e.source || e.auth_index || "");
     return {
       id: String(e.id),
       request_id: e.request_id,
       timestamp: e.timestamp,
-      api_key: e.api_group_key,
+      // Never expose raw API key to the browser (aligned with cpa-usage-keeper RedactSensitiveValue)
+      api_key: redactSensitiveValue(rawKey),
       model: e.model,
       model_alias: e.model_alias || undefined,
       reasoning_effort: e.reasoning_effort || undefined,
       service_tier: e.service_tier || undefined,
       executor_type: e.executor_type || undefined,
       endpoint: e.endpoint || undefined,
-      source: e.source || e.auth_index || "",
-      source_raw: e.source,
+      source: redactIfSensitiveLooking(rawSource),
+      // Keep source_raw for filter value matching, but still mask if it looks like a key
+      source_raw: redactIfSensitiveLooking(String(e.source || "")),
       auth_index: e.auth_index,
       failed: Boolean(e.failed),
       latency_ms: e.latency_ms,

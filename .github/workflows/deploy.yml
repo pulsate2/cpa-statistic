@@ -10,7 +10,7 @@
 #
 # Optional Variables (Settings → Variables):
 #   WORKER_NAME               — default: cpa-statistics
-#   APPLY_D1_SCHEMA           — "true" (default) to run schema.sql on every deploy
+#   APPLY_D1_SCHEMA           — set "true" to run schema.sql on push deploys (default: false)
 
 name: Deploy
 
@@ -22,7 +22,7 @@ on:
       apply_schema:
         description: "Run D1 schema.sql against remote"
         type: boolean
-        default: true
+        default: false
       skip_secrets:
         description: "Skip wrangler secret put (keep existing)"
         type: boolean
@@ -80,7 +80,7 @@ jobs:
         if: >-
           ${{
             (github.event_name == 'workflow_dispatch' && inputs.apply_schema) ||
-            (github.event_name != 'workflow_dispatch' && (vars.APPLY_D1_SCHEMA || 'true') == 'true')
+            (github.event_name != 'workflow_dispatch' && vars.APPLY_D1_SCHEMA == 'true')
           }}
         run: |
           npx wrangler d1 execute cpa-statistics --remote --file=./schema.sql
